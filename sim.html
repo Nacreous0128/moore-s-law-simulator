@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>반도체 성능 발전 시뮬레이션</title>
+    <style>
+        /* 눈누 웹폰트: 메이플스토리 Bold 폰트 적용 */
+        @font-face {
+            font-family: 'MaplestoryOTFBold';
+            src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_20-04@2.1/MaplestoryOTFBold.woff') format('woff');
+            font-weight: normal;
+            font-style: normal;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #0a0d14;
+            color: white;
+            font-family: 'MaplestoryOTFBold', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        h1 {
+            font-size: 24px;
+            margin: 20px 0 10px 0;
+            text-align: center;
+        }
+
+        #info-container {
+            text-align: center;
+            margin-top: 10px;
+        }
+
+        .info-text {
+            color: #a0c8ff;
+            font-size: 16px;
+            margin: 4px 0;
+        }
+
+        .perf-text {
+            color: #ffd700;
+            font-size: 20px;
+            font-weight: bold;
+            margin: 8px 0 15px 0;
+        }
+
+        /* 캔버스 컨테이너 (반응형 대응) */
+        #canvas-container {
+            flex-grow: 1;
+            width: 90%;
+            max-width: 1000px;
+            background-color: #0d111a;
+            border: 1px solid #1e2638;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        /* 슬라이더 컨트롤 영역 */
+        #controls {
+            width: 90%;
+            max-width: 800px;
+            margin-bottom: 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .slider-labels {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            color: #7a8b9e;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+
+        #current-year-label {
+            color: white;
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+
+        /* HTML5 네이티브 슬라이더 커스텀 스타일 */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+
+        input[type=range]:focus {
+            outline: none;
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 8px;
+            cursor: pointer;
+            background: #1c2536;
+            border-radius: 4px;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            height: 24px;
+            width: 24px;
+            border-radius: 50%;
+            background: #ffffff;
+            cursor: pointer;
+            -webkit-appearance: none;
+            margin-top: -8px;
+            border: 4px solid var(--thumb-color, #0055ff);
+        }
+    </style>
+</head>
+<body>
+
+    <h1>연도별 프로세서 성능 시뮬레이션</h1>
+    
+    <div id="info-container">
+        <div id="lbl-trans" class="info-text">트랜지스터 수 T(n): 0 개</div>
+        <div id="lbl-clock" class="info-text">클럭 C(n): 0 MHz</div>
+        <div id="lbl-perf" class="perf-text">종합 성능 수치: 0.0</div>
+    </div>
+
+    <div id="canvas-container">
+        <canvas id="simCanvas"></canvas>
+    </div>
+
+    <div id="controls">
+        <div id="current-year-label">1971년</div>
+        <!-- 2100년으로 범위 수정 -->
+        <input type="range" id="yearSlider" min="1971" max="2100" value="1971">
+        <div class="slider-labels">
+            <span>1971년</span>
+            <span>2100년</span>
+        </div>
+    </div>
+
+    <script>
+        // ---------------------------------------------------------
+        // 1. 수식 정의
+        // ---------------------------------------------------------
+        function calculateTransistors(year) {
+            if (year < 1971) year = 1971;
+            if (year <= 2022) {
+                return 2308 * Math.pow(2, (year - 1971) / 2);
+            } else {
+                return 2308 * Math.pow(2, 25.5 + (year - 2022) / 3);
+            }
+        }
+
+        function calculateClock(year) {
+            if (year < 1971) year = 1971;
+            if (year < 2000) return 0.001 * Math.pow(1.269, year - 1971);
+            if (year <= 2002) return year - 1999;
+            return 3 * Math.pow(2, (year - 2002) / 21);
+        }
+
+        function formatClockString(clock_ghz) {
+            if (clock_ghz < 1.0) {
+                return (clock_ghz * 1000).toFixed(1).replace(/\B(?=(\d{3})+(?!\d))/g, ",") + " MHz";
+            } else {
+                return clock_ghz.toFixed(1).replace(/\B(?=(\d{3})+(?!\d))/g, ",") + " GHz";
+            }
+        }
+
+        // ---------------------------------------------------------
+        // 2. DOM 요소 및 전역 변수
+        // ---------------------------------------------------------
+        const canvas = document.getElementById("simCanvas");
+        const ctx = canvas.getContext("2d");
+        const slider = document.getElementById("yearSlider");
+        const lblTrans = document.getElementById("lbl-trans");
+        const lblClock = document.getElementById("lbl-clock");
+        const lblPerf = document.getElementById("lbl-perf");
+        const lblCurrentYear = document.getElementById("current-year-label");
+
+        let currentYear = parseInt(slider.value);
+        let particleOffsets = [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875];
+        let lastTime = performance.now();
+
+        // 캔버스 크기 자동 조절
+        function resizeCanvas() {
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // 슬라이더 이벤트
+        slider.addEventListener('input', (e) => {
+            currentYear = parseInt(e.target.value);
+            lblCurrentYear.innerText = `${currentYear}년`;
+        });
+
+        // ---------------------------------------------------------
+        // 3. 경로 계산 헬퍼 함수
+        // ---------------------------------------------------------
+        function getPointOnPath(path, progress) {
+            let lengths = [];
+            let totalLen = 0;
+            for (let i = 0; i < path.length - 1; i++) {
+                let dx = path[i+1][0] - path[i][0];
+                let dy = path[i+1][1] - path[i][1];
+                let dist = Math.hypot(dx, dy);
+                lengths.push(dist);
+                totalLen += dist;
+            }
+
+            let targetDist = (progress % 1.0) * totalLen;
+            let accum = 0;
+            for (let i = 0; i < lengths.length; i++) {
+                if (accum + lengths[i] >= targetDist) {
+                    let segP = (targetDist - accum) / lengths[i];
+                    let x = path[i][0] + (path[i+1][0] - path[i][0]) * segP;
+                    let y = path[i][1] + (path[i+1][1] - path[i][1]) * segP;
+                    return { x, y };
+                }
+                accum += lengths[i];
+            }
+            return { x: path[path.length - 1][0], y: path[path.length - 1][1] };
+        }
+
+        // ---------------------------------------------------------
+        // 4. 메인 렌더링 루프
+        // ---------------------------------------------------------
+        function updateSimulation(currentTime) {
+            // Delta Time 계산 (주사율 독립적인 속도 보정)
+            let deltaTime = (currentTime - lastTime) / 16.666; 
+            if (deltaTime > 5) deltaTime = 1;
+            lastTime = currentTime;
+
+            let transistors = Math.round(calculateTransistors(currentYear));
+            let clock_ghz = calculateClock(currentYear);
+            let raw_perf = transistors * clock_ghz;
+
+            lblTrans.innerText = `트랜지스터 수 T(n): ${transistors.toLocaleString('ko-KR')} 개`;
+            lblClock.innerText = `클럭 C(n): ${formatClockString(clock_ghz)}`;
+            lblPerf.innerText = `종합 성능 수치: ${raw_perf.toLocaleString('ko-KR', {minimumFractionDigits: 1, maximumFractionDigits: 1})}`;
+
+            // 정규화 기준 연도 2100년 반영
+            let perf_1971 = Math.max(1.0, calculateTransistors(1971) * calculateClock(1971));
+            let perf_2100 = Math.max(1.0, calculateTransistors(2100) * calculateClock(2100));
+            let log_perf = Math.log10(Math.max(1.0, raw_perf));
+            let min_log = Math.log10(perf_1971);
+            let max_log = Math.log10(perf_2100);
+            let norm_perf = Math.max(0.0, Math.min(1.0, (log_perf - min_log) / (max_log - min_log)));
+
+            // 속도 및 색상 연산
+            let speed = (0.005 + norm_perf * 0.045) * deltaTime; 
+            
+            let r = Math.floor(0 + 255 * norm_perf);
+            let g = Math.floor(180 * (1 - norm_perf) + 50 * norm_perf);
+            let b = Math.floor(255 * (1 - norm_perf));
+            let electricityColor = `rgb(${r}, ${g}, ${b})`;
+
+            slider.style.setProperty('--thumb-color', electricityColor);
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            let cx = canvas.width / 2;
+            let cy = canvas.height / 2;
+
+            let circuitPaths = [
+                [[cx - 300, cy - 100], [cx - 180, cy - 100], [cx - 180, cy - 30], [cx - 70, cy - 30]],
+                [[cx - 300, cy + 100], [cx - 180, cy + 100], [cx - 180, cy + 30], [cx - 70, cy + 30]],
+                [[cx + 300, cy - 100], [cx + 180, cy - 100], [cx + 180, cy - 30], [cx + 70, cy - 30]],
+                [[cx + 300, cy + 100], [cx + 180, cy + 100], [cx + 180, cy + 30], [cx + 70, cy + 30]],
+                [[cx - 40, cy - 130], [cx - 40, cy - 60]],
+                [[cx + 40, cy - 130], [cx + 40, cy - 60]],
+                [[cx - 40, cy + 130], [cx - 40, cy + 60]],
+                [[cx + 40, cy + 130], [cx + 40, cy + 60]]
+            ];
+
+            ctx.lineWidth = 3;
+            ctx.lineJoin = "round";
+            circuitPaths.forEach(path => {
+                ctx.beginPath();
+                ctx.moveTo(path[0][0], path[0][1]);
+                for (let i = 1; i < path.length; i++) {
+                    ctx.lineTo(path[i][0], path[i][1]);
+                }
+                ctx.strokeStyle = "#1f2d42";
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.arc(path[0][0], path[0][1], 4, 0, Math.PI * 2);
+                ctx.fillStyle = "#2c3e55";
+                ctx.fill();
+            });
+
+            circuitPaths.forEach((path, i) => {
+                particleOffsets[i] = (particleOffsets[i] + speed) % 1.0;
+                let pt = getPointOnPath(path, particleOffsets[i]);
+                let pr = 3 + norm_perf * 3;
+
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, pr + 2, 0, Math.PI * 2);
+                ctx.strokeStyle = electricityColor;
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, pr, 0, Math.PI * 2);
+                ctx.fillStyle = electricityColor;
+                ctx.fill();
+            });
+
+            ctx.strokeStyle = "#8a9ba8";
+            ctx.lineWidth = 2;
+            for (let x = cx - 50; x <= cx + 50; x += 15) {
+                ctx.beginPath(); ctx.moveTo(x, cy - 65); ctx.lineTo(x, cy - 55); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(x, cy + 55); ctx.lineTo(x, cy + 65); ctx.stroke();
+            }
+            for (let y = cy - 40; y <= cy + 40; y += 15) {
+                ctx.beginPath(); ctx.moveTo(cx - 75, y); ctx.lineTo(cx - 65, y); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(cx + 65, y); ctx.lineTo(cx + 75, y); ctx.stroke();
+            }
+
+            ctx.fillStyle = "#1c2333";
+            ctx.strokeStyle = "#3a4b68";
+            ctx.fillRect(cx - 65, cy - 55, 130, 110);
+            ctx.strokeRect(cx - 65, cy - 55, 130, 110);
+
+            let core_w = 90;
+            let core_h = 90;
+            ctx.fillStyle = "#0d111a";
+            ctx.strokeStyle = electricityColor;
+            ctx.fillRect(cx - core_w/2, cy - core_h/2, core_w, core_h);
+            ctx.strokeRect(cx - core_w/2, cy - core_h/2, core_w, core_h);
+
+            ctx.font = "12px MaplestoryOTFBold, sans-serif";
+            ctx.fillStyle = "white";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText("CPU CORE", cx, cy - 10);
+            
+            ctx.font = "16px MaplestoryOTFBold, sans-serif";
+            ctx.fillStyle = electricityColor;
+            ctx.fillText(`${currentYear}년`, cx, cy + 15);
+
+            requestAnimationFrame(updateSimulation);
+        }
+
+        requestAnimationFrame(updateSimulation);
+
+    </script>
+</body>
+</html>
